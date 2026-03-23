@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:tradernet.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(/Users/karimakhmediyev/VScodeProjects/growgrow/venv/bin/python --version)",
+      "Bash(git init:*)"
+    ]
+  }
+}
