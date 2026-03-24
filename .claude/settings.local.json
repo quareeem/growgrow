@@ -5,8 +5,34 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:github.com)",
       "WebSearch",
-      "Bash(/Users/karimakhmediyev/VScodeProjects/growgrow/venv/bin/python --version)",
-      "Bash(git init:*)"
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(pytest:*)",
+      "Bash(source */venv/bin/activate*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Reminder: Run /review or pytest before pushing.'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Reminder: Run ruff check on modified files.'"
+          }
+        ]
+      }
     ]
   }
 }

@@ -29,35 +29,48 @@ def _colorize_pnl(value: float, formatted: str) -> str:
 
 
 def display_portfolio(summary: PortfolioSummary) -> None:
-    """Print portfolio positions as a formatted table with P&L."""
+    """Print portfolio positions grouped by asset type and currency."""
     if not summary.positions:
         print("No positions found.")
         return
 
-    headers = ["Ticker", "Name", "Qty", "Avg Price", "Price", "Value", "P&L", "P&L %", "Weight %"]
-    rows = []
-
+    # Group: equity first, bond second; within each type sort currencies alphabetically
+    type_order = ["equity", "bond"]
+    groups: dict[str, dict[str, list]] = {"equity": {}, "bond": {}}
     for p in summary.positions:
-        pnl_str = _colorize_pnl(p.unrealized_pnl, f"{p.unrealized_pnl:+,.2f}")
-        pnl_pct_str = _colorize_pnl(p.pnl_pct, f"{p.pnl_pct:+.2f}%")
-        weight = summary.weight(p)
+        groups.setdefault(p.asset_type, {}).setdefault(p.currency, []).append(p)
 
-        rows.append(
-            [
-                p.ticker,
-                p.name[:20],
-                f"{p.quantity:g}",
-                f"{p.avg_price:,.2f}",
-                f"{p.current_price:,.2f}",
-                f"{p.market_value:,.2f}",
-                pnl_str,
-                pnl_pct_str,
-                f"{weight:.1f}%",
-            ]
-        )
+    headers = ["Ticker", "Name", "Qty", "Avg Price", "Price", "Value", "P&L", "P&L %", "Wt% (ccy)"]
 
-    print(tabulate(rows, headers=headers, tablefmt="simple"))
-    print()
+    for asset_type in type_order:
+        currencies = groups.get(asset_type, {})
+        if not currencies:
+            continue
+        type_label = asset_type.capitalize()
+        for currency in sorted(currencies.keys()):
+            positions = currencies[currency]
+            print(f"{BOLD}── {type_label} / {currency} ──{RESET}")
+            rows = []
+            for p in positions:
+                pnl_str = _colorize_pnl(p.unrealized_pnl, f"{p.unrealized_pnl:+,.2f}")
+                pnl_pct_str = _colorize_pnl(p.pnl_pct, f"{p.pnl_pct:+.2f}%")
+                weight = summary.weight(p)
+                rows.append(
+                    [
+                        p.ticker,
+                        p.name[:20],
+                        f"{p.quantity:g}",
+                        f"{p.avg_price:,.2f}",
+                        f"{p.current_price:,.2f}",
+                        f"{p.market_value:,.2f}",
+                        pnl_str,
+                        pnl_pct_str,
+                        f"{weight:.1f}%",
+                    ]
+                )
+            print(tabulate(rows, headers=headers, tablefmt="simple"))
+            print()
+
     _display_totals(summary)
 
 

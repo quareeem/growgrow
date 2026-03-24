@@ -72,6 +72,22 @@ ruff format .               # format
 pytest                      # run tests
 ```
 
+## Claude Code Configuration
+This project uses Claude Code rules, commands, and hooks for quality enforcement.
+
+**Rules** (auto-loaded in every conversation):
+- `.claude/rules/python-standards.md` - PEP 8, type hints, Pythonic patterns, function limits
+- `.claude/rules/testing-standards.md` - pytest AAA pattern, mocking strategy, 80%+ coverage
+- `.claude/rules/security.md` - credential handling, no eval/exec, path safety
+
+**Custom Commands**:
+- `/review` - Quick lint + format + test check
+- `/quality-gate` - Full validation with coverage and secrets scan
+
+**Hooks**:
+- PostToolUse (Edit/Write): Reminds to run ruff on modified files
+- PreToolUse (git push): Reminds to run tests before pushing
+
 ## Adding New Features
 When extending this project, follow these patterns:
 1. New data sources → add a new module (e.g., `market.py`, `watchlist.py`)

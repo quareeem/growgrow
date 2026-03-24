@@ -61,6 +61,7 @@ def load_snapshot(filepath: Path) -> PortfolioSummary:
                 avg_price=float(row["avg_price"]),
                 current_price=float(row["current_price"]),
                 currency=row.get("currency", "USD"),
+                asset_type=row.get("asset_type", "equity"),
             )
         )
 

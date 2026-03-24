@@ -19,6 +19,7 @@ class Position:
     avg_price: float
     current_price: float
     currency: str = "USD"
+    asset_type: str = "equity"  # "equity" or "bond"
 
     @property
     def cost_basis(self) -> float:
@@ -51,6 +52,7 @@ class Position:
             "avg_price": self.avg_price,
             "current_price": self.current_price,
             "currency": self.currency,
+            "asset_type": self.asset_type,
             "cost_basis": self.cost_basis,
             "market_value": self.market_value,
             "unrealized_pnl": self.unrealized_pnl,
@@ -88,10 +90,17 @@ class PortfolioSummary:
         return len(self.positions)
 
     def weight(self, position: Position) -> float:
-        """Calculate a position's weight in the portfolio (%)."""
-        if self.total_market_value == 0:
+        """Calculate a position's weight within its currency group (%).
+
+        Cross-currency weight is meaningless without FX conversion, so weight
+        is calculated relative to all positions sharing the same currency.
+        """
+        currency_total = sum(
+            p.market_value for p in self.positions if p.currency == position.currency
+        )
+        if currency_total == 0:
             return 0.0
-        return (position.market_value / self.total_market_value) * 100
+        return (position.market_value / currency_total) * 100
 
 
 def parse_positions(raw_data: dict[str, Any]) -> PortfolioSummary:
@@ -137,6 +146,10 @@ def parse_positions(raw_data: dict[str, Any]) -> PortfolioSummary:
 
 def _extract_positions_list(raw_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Try multiple known response structures to find the positions list."""
+    # Unwrap top-level "result" envelope (actual Tradernet API response)
+    if "result" in raw_data:
+        raw_data = raw_data["result"]
+
     # Try: raw_data["ps"]["pos"]
     if "ps" in raw_data:
         ps = raw_data["ps"]
@@ -166,13 +179,23 @@ def _extract_positions_list(raw_data: dict[str, Any]) -> list[dict[str, Any]]:
 def _parse_single_position(item: dict[str, Any]) -> Position | None:
     """Parse a single position dict. Tries multiple field name conventions."""
     ticker = item.get("i") or item.get("ticker") or item.get("symbol") or ""
-    name = item.get("n") or item.get("name") or item.get("descr") or ticker
+    name = item.get("name") or item.get("n") or item.get("descr") or ticker
     quantity = float(item.get("q", 0) or item.get("quantity", 0) or 0)
-    avg_price = float(item.get("fv", 0) or item.get("avg_price", 0) or item.get("avgPrice", 0) or 0)
-    current_price = float(
-        item.get("lp", 0) or item.get("current_price", 0) or item.get("lastPrice", 0) or 0
+    # bal_price_a = average purchase price; fv = face value (not useful for avg price)
+    avg_price = float(
+        item.get("bal_price_a", 0) or item.get("avg_price", 0) or item.get("avgPrice", 0) or 0
     )
-    currency = item.get("cur") or item.get("currency") or "USD"
+    # mkt_price = current market price; lp = last price (fallback)
+    current_price = float(
+        item.get("mkt_price", 0)
+        or item.get("lp", 0)
+        or item.get("current_price", 0)
+        or item.get("lastPrice", 0)
+        or 0
+    )
+    currency = item.get("curr") or item.get("cur") or item.get("currency") or "USD"
+    # t=1: equity (stocks/ETFs), t=2: bond; default to equity
+    asset_type = "bond" if item.get("t") == 2 else "equity"
 
     if not ticker or quantity == 0:
         return None
@@ -184,4 +207,5 @@ def _parse_single_position(item: dict[str, Any]) -> Position | None:
         avg_price=avg_price,
         current_price=current_price,
         currency=currency,
+        asset_type=asset_type,
     )
