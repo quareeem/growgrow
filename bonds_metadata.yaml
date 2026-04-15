@@ -1,0 +1,97 @@
+# Bond metadata sourced manually from KASE (kase.kz) and AIX (aix.kz)
+#
+# API field 'Yield' is always 0 for all bonds — do not use it.
+# Cross-validated fields: maturity_date vs API maturity_d, face_value vs API face_val_a, isin vs API issue_nb
+#
+# api_validated: true  = maturity + face_value confirmed against live API response
+# api_validated: false = only API data available, not yet verified from exchange website
+#
+# To update: find the bond on kase.kz or aix.kz by ISIN, copy the fields below, set api_validated: true
+
+ORBSB5.KZ:
+  name: ТОО Orbis Leasing
+  isin: KZ2P00013832
+  exchange: KASE
+  currency: KZT
+  face_value: 1000
+  issue_date: "2025-04-22"
+  maturity_date: "2026-04-22"   # API maturity_d matches ✓ — matures in ~11 days!
+  coupon_rate: 20.0             # % APR
+  coupon_type: fixed
+  coupon_frequency: monthly     # 30-day periods, 30/360 basis
+  settlement_basis: "30/360"
+  api_validated: true
+
+TSSPB1.KZ:
+  name: ТОО ТССП Групп
+  isin: KZ2P00008113
+  exchange: KASE
+  currency: KZT
+  face_value: 1000
+  issue_date: "2025-07-10"
+  maturity_date: "2028-07-10"   # API maturity_d matches ✓
+  coupon_rate: 18.0             # % APR
+  coupon_type: fixed
+  coupon_frequency: quarterly   # previous Apr 10, next Jul 10 → 90-day periods
+  settlement_basis: "30/360"
+  api_validated: true
+
+# --- Pending: paste data from KASE for remaining KZT bonds ---
+
+MFRFB19.KZ:
+  name: МФО R-Finance
+  isin: KZ2P00014004
+  exchange: KASE
+  currency: KZT
+  face_value: 1000
+  issue_date: "2025-06-26"
+  maturity_date: "2028-06-26"   # API maturity_d matches ✓
+  coupon_rate: 21.0             # % APR
+  coupon_type: fixed
+  coupon_frequency: monthly     # previous Mar 26, next Apr 26 → 30-day periods
+  settlement_basis: "30/360"
+  api_validated: true
+
+UZPAB1.KZ:
+  name: АО Усть-Каменогорский завод п
+  isin: KZ2C00013811
+  exchange: KASE
+  currency: KZT
+  face_value: 1000
+  issue_date: "2025-06-04"
+  maturity_date: "2028-06-04"   # API maturity_d matches ✓
+  coupon_rate: 21.5             # % APR
+  coupon_type: fixed
+  coupon_frequency: quarterly   # previous Mar 4, next Jun 4 → 90-day periods
+  settlement_basis: "30/360"
+  api_validated: true
+
+# --- Pending: paste data from AIX for USD bonds ---
+
+FFSPC3.0527.AIX.KZ:
+  name: Freedom Finance SPC Ltd.
+  isin: KZX000004528
+  exchange: AIX
+  currency: USD
+  face_value: 100
+  issue_date: "2025-05-26"
+  maturity_date: "2027-05-26"   # API maturity_d matches ✓
+  coupon_rate: 10.0             # % APR (from exchange prospectus)
+  coupon_type: fixed
+  coupon_frequency: quarterly   # 4 per year
+  settlement_basis: "30/360"
+  api_validated: true
+
+MOBI.1028.AIX.KZ:
+  name: Bonds of Freedom Mobile LLP
+  isin: KZX000005400
+  exchange: AIX
+  currency: USD
+  face_value: 100
+  issue_date: "2025-10-08"
+  maturity_date: "2028-10-08"   # API maturity_d matches ✓ (AIX shows "4 years" but dates = 3 years — AIX display bug)
+  coupon_rate: 11.0             # % APR
+  coupon_type: fixed
+  coupon_frequency: quarterly   # 4 per year, 30/360 basis
+  settlement_basis: "30/360"
+  api_validated: true

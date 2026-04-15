@@ -6,6 +6,7 @@ import pytest
 
 from growgrow.portfolio import PortfolioSummary, Position
 from growgrow.snapshot import (
+    _round_position_row,
     compare_snapshots,
     load_snapshot,
     save_snapshot,
@@ -34,6 +35,35 @@ def tmp_data_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+class TestRounding:
+    def test_usd_rounded_to_1_decimal(self):
+        row = {"currency": "USD", "avg_price": 150.2567, "current_price": 175.555,
+               "cost_basis": 1502.567, "market_value": 1755.55, "unrealized_pnl": 252.983,
+               "pnl_pct": 16.834}
+        result = _round_position_row(row)
+        assert result["avg_price"] == 150.3
+        assert result["current_price"] == 175.6
+        assert result["market_value"] == 1755.5
+        assert result["pnl_pct"] == 16.8
+
+    def test_kzt_rounded_to_integer(self):
+        row = {"currency": "KZT", "avg_price": 5033.2105, "current_price": 4531.0,
+               "cost_basis": 704649.47, "market_value": 634340.0, "unrealized_pnl": -70309.47,
+               "pnl_pct": -9.977}
+        result = _round_position_row(row)
+        assert result["avg_price"] == 5033
+        assert result["cost_basis"] == 704649
+        assert result["unrealized_pnl"] == -70309
+        assert result["pnl_pct"] == -10.0
+
+    def test_weight_pct_always_1_decimal(self):
+        row = {"currency": "KZT", "avg_price": 1000, "current_price": 1000,
+               "cost_basis": 1000, "market_value": 1000, "unrealized_pnl": 0,
+               "pnl_pct": 0, "weight_pct": 38.912}
+        result = _round_position_row(row)
+        assert result["weight_pct"] == 38.9
+
+
 class TestSaveAndLoad:
     def test_save_creates_csv(self, sample_summary, tmp_data_dir):
         filepath = save_snapshot(sample_summary)
@@ -41,12 +71,32 @@ class TestSaveAndLoad:
         assert filepath.suffix == ".csv"
         assert "portfolio_2026-03-17_1430" in filepath.name
 
+    def test_csv_has_metadata_header(self, sample_summary, tmp_data_dir):
+        filepath = save_snapshot(sample_summary)
+        content = filepath.read_text()
+        assert "# snapshot_date:" in content
+        assert "# positions: 2" in content
+
+    def test_csv_has_subtotal_rows(self, sample_summary, tmp_data_dir):
+        filepath = save_snapshot(sample_summary)
+        content = filepath.read_text()
+        assert "SUBTOTAL_EQUITY_USD" in content
+
+    def test_csv_has_weight_pct_column(self, sample_summary, tmp_data_dir):
+        filepath = save_snapshot(sample_summary)
+        content = filepath.read_text()
+        assert "weight_pct" in content
+
+    def test_roundtrip_skips_subtotals(self, sample_summary, tmp_data_dir):
+        filepath = save_snapshot(sample_summary)
+        loaded = load_snapshot(filepath)
+        assert loaded.position_count == 2  # subtotals not counted as positions
+
     def test_roundtrip(self, sample_summary, tmp_data_dir):
         filepath = save_snapshot(sample_summary)
         loaded = load_snapshot(filepath)
-        assert loaded.position_count == 2
         assert loaded.positions[0].ticker == "AAPL.US"
-        assert loaded.positions[0].current_price == 175.50
+        assert loaded.positions[0].current_price == pytest.approx(175.5, abs=0.1)
         assert loaded.positions[1].quantity == 5
 
     def test_timestamp_from_filename(self, sample_summary, tmp_data_dir):

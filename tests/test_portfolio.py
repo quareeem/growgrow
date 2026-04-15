@@ -2,7 +2,7 @@
 
 import pytest
 
-from growgrow.portfolio import PortfolioSummary, Position, parse_positions
+from growgrow.portfolio import PortfolioSummary, Position, _parse_single_position, parse_positions
 
 
 @pytest.fixture
@@ -54,6 +54,11 @@ class TestPosition:
         assert d["market_value"] == 1755.00
         assert d["unrealized_pnl"] == 255.00
         assert "pnl_pct" in d
+        assert "weight_pct" not in d
+
+    def test_to_dict_with_weight(self, sample_position):
+        d = sample_position.to_dict(weight_pct=12.5)
+        assert d["weight_pct"] == 12.5
 
 
 class TestPortfolioSummary:
@@ -84,6 +89,47 @@ class TestPortfolioSummary:
         assert summary.total_pnl_pct == 0.0
 
 
+class TestBondPrices:
+    def test_kzt_bond_price_conversion(self):
+        """Bond prices are % of par — must multiply by face_val to get KZT per unit."""
+        item = {
+            "i": "MFRFB19.KZ", "name": "МФО R-Finance", "q": 320,
+            "t": 2, "curr": "KZT",
+            "face_val_a": 1000, "bal_price_a": 95.48, "mkt_price": 91.5,
+        }
+        pos = _parse_single_position(item)
+        assert pos is not None
+        assert pos.asset_type == "bond"
+        assert pos.avg_price == pytest.approx(954.8)
+        assert pos.current_price == pytest.approx(915.0)
+        assert pos.market_value == pytest.approx(320 * 915.0)
+
+    def test_usd_bond_price_conversion(self):
+        """USD bond with face=100: prices are still % of par."""
+        item = {
+            "i": "FFSPC3.0527.AIX.KZ", "name": "Freedom Finance SPC", "q": 10,
+            "t": 2, "curr": "USD",
+            "face_val_a": 100, "bal_price_a": 100.88, "mkt_price": 100.7,
+        }
+        pos = _parse_single_position(item)
+        assert pos is not None
+        assert pos.avg_price == pytest.approx(100.88)
+        assert pos.current_price == pytest.approx(100.7)
+
+    def test_equity_price_not_converted(self):
+        """Equity prices are already in currency units, no conversion."""
+        item = {
+            "i": "HSBK.KZ", "name": "Народный банк", "q": 3740,
+            "t": 1, "curr": "KZT",
+            "bal_price_a": 302.2, "mkt_price": 387.41, "face_val_a": 1,
+        }
+        pos = _parse_single_position(item)
+        assert pos is not None
+        assert pos.asset_type == "equity"
+        assert pos.avg_price == pytest.approx(302.2)
+        assert pos.current_price == pytest.approx(387.41)
+
+
 class TestParsePositions:
     def test_parse_tradernet_format(self):
         raw = {
@@ -91,19 +137,21 @@ class TestParsePositions:
                 "pos": [
                     {
                         "i": "AAPL.US",
-                        "n": "Apple Inc",
+                        "name": "Apple Inc",
                         "q": 10,
-                        "fv": 150.0,
-                        "lp": 175.5,
-                        "cur": "USD",
+                        "t": 1,
+                        "bal_price_a": 150.0,
+                        "mkt_price": 175.5,
+                        "curr": "USD",
                     },
                     {
                         "i": "MSFT.US",
-                        "n": "Microsoft",
+                        "name": "Microsoft",
                         "q": 5,
-                        "fv": 300.0,
-                        "lp": 310.0,
-                        "cur": "USD",
+                        "t": 1,
+                        "bal_price_a": 300.0,
+                        "mkt_price": 310.0,
+                        "curr": "USD",
                     },
                 ]
             }

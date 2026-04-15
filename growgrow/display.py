@@ -8,7 +8,8 @@ import sys
 
 from tabulate import tabulate
 
-from growgrow.portfolio import PortfolioSummary
+from growgrow.bonds import current_yield, days_to_maturity, load_bond_metadata
+from growgrow.portfolio import PortfolioSummary, Position
 from growgrow.snapshot import PositionChange
 
 # ANSI color codes (disabled if not a TTY)
@@ -34,13 +35,13 @@ def display_portfolio(summary: PortfolioSummary) -> None:
         print("No positions found.")
         return
 
+    bond_meta = load_bond_metadata()
+
     # Group: equity first, bond second; within each type sort currencies alphabetically
     type_order = ["equity", "bond"]
     groups: dict[str, dict[str, list]] = {"equity": {}, "bond": {}}
     for p in summary.positions:
         groups.setdefault(p.asset_type, {}).setdefault(p.currency, []).append(p)
-
-    headers = ["Ticker", "Name", "Qty", "Avg Price", "Price", "Value", "P&L", "P&L %", "Wt% (ccy)"]
 
     for asset_type in type_order:
         currencies = groups.get(asset_type, {})
@@ -50,28 +51,93 @@ def display_portfolio(summary: PortfolioSummary) -> None:
         for currency in sorted(currencies.keys()):
             positions = currencies[currency]
             print(f"{BOLD}── {type_label} / {currency} ──{RESET}")
-            rows = []
-            for p in positions:
-                pnl_str = _colorize_pnl(p.unrealized_pnl, f"{p.unrealized_pnl:+,.2f}")
-                pnl_pct_str = _colorize_pnl(p.pnl_pct, f"{p.pnl_pct:+.2f}%")
-                weight = summary.weight(p)
-                rows.append(
-                    [
-                        p.ticker,
-                        p.name[:20],
-                        f"{p.quantity:g}",
-                        f"{p.avg_price:,.2f}",
-                        f"{p.current_price:,.2f}",
-                        f"{p.market_value:,.2f}",
-                        pnl_str,
-                        pnl_pct_str,
-                        f"{weight:.1f}%",
-                    ]
-                )
-            print(tabulate(rows, headers=headers, tablefmt="simple"))
+            if asset_type == "bond":
+                _display_bond_group(positions, summary, bond_meta)
+            else:
+                _display_equity_group(positions, summary)
             print()
 
     _display_totals(summary)
+
+
+def _display_equity_group(positions: list[Position], summary: PortfolioSummary) -> None:
+    """Print equity positions with P&L-focused columns."""
+    headers = ["Ticker", "Name", "Qty", "Avg Price", "Price", "Value", "P&L", "P&L %", "Wt% (ccy)"]
+    rows = []
+    for p in positions:
+        pnl_str = _colorize_pnl(p.unrealized_pnl, f"{p.unrealized_pnl:+,.2f}")
+        pnl_pct_str = _colorize_pnl(p.pnl_pct, f"{p.pnl_pct:+.2f}%")
+        weight = summary.weight(p)
+        rows.append([
+            p.ticker,
+            p.name[:20],
+            f"{p.quantity:g}",
+            f"{p.avg_price:,.2f}",
+            f"{p.current_price:,.2f}",
+            f"{p.market_value:,.2f}",
+            pnl_str,
+            pnl_pct_str,
+            f"{weight:.1f}%",
+        ])
+    print(tabulate(rows, headers=headers, tablefmt="simple"))
+
+
+def _display_bond_group(
+    positions: list[Position],
+    summary: PortfolioSummary,
+    bond_meta: dict,
+) -> None:
+    """Print bond positions with income-focused columns.
+
+    Columns: Ticker, Name, Qty, Price%, Value, Coupon%, Curr.Yield, Accrued, Maturity, Days
+    """
+    _FREQ_SHORT = {"monthly": "M", "quarterly": "Q", "semi-annual": "S", "annual": "A"}
+
+    headers = [
+        "Ticker", "Name", "Qty", "Price%", "Value",
+        "Coupon%", "Freq", "Curr.Yield", "Accrued", "Maturity", "Days",
+    ]
+    rows = []
+    for p in positions:
+        meta = bond_meta.get(p.ticker, {})
+        face_val = float(meta.get("face_value") or 100)
+        coupon_rate = meta.get("coupon_rate")
+        maturity_str = meta.get("maturity_date")
+
+        price_pct = (p.current_price / face_val * 100) if face_val else 0.0
+        price_pct_fmt = f"{price_pct:.2f}%"
+
+        cy = current_yield(coupon_rate, p.current_price, face_val) if coupon_rate else None
+        cy_fmt = f"{cy:.2f}%" if cy is not None else "—"
+
+        coupon_fmt = f"{coupon_rate:.1f}%" if coupon_rate is not None else "—"
+        freq_fmt = _FREQ_SHORT.get(meta.get("coupon_frequency", ""), "—")
+
+        accrued_total = p.accrued_per_unit * p.quantity
+        accrued_fmt = f"{accrued_total:,.0f}" if accrued_total else "—"
+
+        if maturity_str:
+            days = days_to_maturity(maturity_str)
+            maturity_fmt = maturity_str
+            days_fmt = _colorize_pnl(-days, str(days)) if days <= 30 else str(days)
+        else:
+            maturity_fmt = "—"
+            days_fmt = "—"
+
+        rows.append([
+            p.ticker,
+            p.name[:20],
+            f"{p.quantity:g}",
+            price_pct_fmt,
+            f"{p.market_value:,.0f}",
+            coupon_fmt,
+            freq_fmt,
+            cy_fmt,
+            accrued_fmt,
+            maturity_fmt,
+            days_fmt,
+        ])
+    print(tabulate(rows, headers=headers, tablefmt="simple"))
 
 
 def _display_totals(summary: PortfolioSummary) -> None:

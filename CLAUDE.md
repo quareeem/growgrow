@@ -45,6 +45,13 @@ display.py   portfolio.py  →  snapshot.py  →  data/*.csv
 - Ruff for linting and formatting
 - Tests in tests/ using pytest
 
+## Bond Metadata
+- `bonds_metadata.yaml` — manually maintained bond details (coupon rate, frequency, maturity)
+- Source: KASE bonds at kase.kz, AIX bonds at aix.kz — search by ISIN
+- API `Yield` field is always 0 — never use it; use `coupon_rate` from this file instead
+- Set `api_validated: true` after cross-checking maturity_date and face_value against live API
+- 4 bonds still pending full data: MFRFB19.KZ, UZPAB1.KZ, MOBI.1028.AIX.KZ (and FFSPC3 coupon confirmed)
+
 ## Config / Secrets
 - API keys in `tradernet.ini` (NEVER commit this file)
 - Format: `[auth]` section with `public` and `private` keys (matches tradernet-sdk's from_config)
