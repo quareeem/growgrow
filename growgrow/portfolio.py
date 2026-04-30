@@ -75,6 +75,8 @@ class PortfolioSummary:
 
     positions: list[Position] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
+    fx_rates: dict[str, float] = field(default_factory=dict)
+    """Currency code -> currval (rate against RUB) from API `acc` section."""
 
     @property
     def total_cost_basis(self) -> float:
@@ -110,6 +112,52 @@ class PortfolioSummary:
         if currency_total == 0:
             return 0.0
         return (position.market_value / currency_total) * 100
+
+    def to_usd(self, amount: float, currency: str) -> float | None:
+        """Convert a native amount to USD using stored FX rates.
+
+        Rates are RUB-based (`currval`): amount_in_rub = amount * currval_native,
+        so amount_in_usd = amount * currval_native / currval_USD.
+
+        Returns None if either the source or USD rate is missing.
+        """
+        src_rate = self.fx_rates.get(currency)
+        usd_rate = self.fx_rates.get("USD")
+        if src_rate is None or usd_rate is None or usd_rate == 0:
+            return None
+        return amount * src_rate / usd_rate
+
+    def market_value_by_currency(self) -> dict[str, float]:
+        """Native-currency totals per currency."""
+        totals: dict[str, float] = {}
+        for p in self.positions:
+            totals[p.currency] = totals.get(p.currency, 0.0) + p.market_value
+        return totals
+
+    def market_value_by_asset_type_usd(self) -> dict[str, float]:
+        """USD-equivalent totals grouped by asset_type ('equity'/'bond').
+
+        Positions with missing FX rates are skipped.
+        """
+        totals: dict[str, float] = {}
+        for p in self.positions:
+            usd = self.to_usd(p.market_value, p.currency)
+            if usd is None:
+                continue
+            totals[p.asset_type] = totals.get(p.asset_type, 0.0) + usd
+        return totals
+
+    def total_market_value_usd(self) -> float | None:
+        """Sum of convertible positions in USD. None if no positions can be converted."""
+        total = 0.0
+        any_converted = False
+        for p in self.positions:
+            usd = self.to_usd(p.market_value, p.currency)
+            if usd is None:
+                continue
+            total += usd
+            any_converted = True
+        return total if any_converted else None
 
 
 def parse_positions(raw_data: dict[str, Any]) -> PortfolioSummary:
@@ -150,7 +198,39 @@ def parse_positions(raw_data: dict[str, Any]) -> PortfolioSummary:
         if pos:
             positions.append(pos)
 
-    return PortfolioSummary(positions=positions)
+    fx_rates = _extract_fx_rates(raw_data)
+
+    return PortfolioSummary(positions=positions, fx_rates=fx_rates)
+
+
+def _extract_fx_rates(raw_data: dict[str, Any]) -> dict[str, float]:
+    """Parse FX rates from the `acc` section of the API response.
+
+    Each entry looks like {"curr": "USD", "currval": 83.9982, "s": 469.93}.
+    `currval` is the rate against RUB (RUR itself has currval=1).
+    """
+    if "result" in raw_data:
+        raw_data = raw_data["result"]
+    # `acc` sits at result.acc or nested under result.ps.acc depending on API version
+    acc = raw_data.get("acc")
+    if not isinstance(acc, list):
+        ps = raw_data.get("ps")
+        if isinstance(ps, dict):
+            acc = ps.get("acc")
+    if not isinstance(acc, list):
+        return {}
+    rates: dict[str, float] = {}
+    for entry in acc:
+        if not isinstance(entry, dict):
+            continue
+        curr = entry.get("curr")
+        currval = entry.get("currval")
+        if curr and currval is not None:
+            try:
+                rates[curr] = float(currval)
+            except (TypeError, ValueError):
+                continue
+    return rates
 
 
 def _extract_positions_list(raw_data: dict[str, Any]) -> list[dict[str, Any]]:

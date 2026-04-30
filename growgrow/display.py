@@ -49,7 +49,7 @@ def display_portfolio(summary: PortfolioSummary) -> None:
             continue
         type_label = asset_type.capitalize()
         for currency in sorted(currencies.keys()):
-            positions = currencies[currency]
+            positions = sorted(currencies[currency], key=lambda p: p.market_value, reverse=True)
             print(f"{BOLD}── {type_label} / {currency} ──{RESET}")
             if asset_type == "bond":
                 _display_bond_group(positions, summary, bond_meta)
@@ -140,15 +140,58 @@ def _display_bond_group(
     print(tabulate(rows, headers=headers, tablefmt="simple"))
 
 
+def _format_native(amount: float, currency: str) -> str:
+    """Currency-aware formatting: KZT → integer, others → 2 decimals."""
+    if currency == "KZT":
+        return f"{amount:,.0f}"
+    return f"{amount:,.2f}"
+
+
 def _display_totals(summary: PortfolioSummary) -> None:
-    """Print portfolio totals."""
-    pnl_str = _colorize_pnl(summary.total_unrealized_pnl, f"{summary.total_unrealized_pnl:+,.2f}")
-    pnl_pct_str = _colorize_pnl(summary.total_pnl_pct, f"{summary.total_pnl_pct:+.2f}%")
+    """Print portfolio totals with currency and asset-type breakdowns."""
     print(f"{BOLD}Portfolio Summary{RESET}")
     print(f"  Positions:    {summary.position_count}")
-    print(f"  Cost Basis:   {summary.total_cost_basis:,.2f}")
-    print(f"  Market Value: {summary.total_market_value:,.2f}")
-    print(f"  Total P&L:    {pnl_str} ({pnl_pct_str})")
+
+    total_usd = summary.total_market_value_usd()
+    if total_usd is None or total_usd == 0:
+        # FX rates missing — fall back to native-only view
+        print()
+        print(f"  {BOLD}By Currency (no FX rates available):{RESET}")
+        by_ccy = summary.market_value_by_currency()
+        for ccy in sorted(by_ccy.keys()):
+            print(f"    {ccy:<5} {_format_native(by_ccy[ccy], ccy):>14}")
+        print()
+        print(f"  As of:        {summary.timestamp:%Y-%m-%d %H:%M}")
+        return
+
+    print(f"  Total (USD):  ${total_usd:,.2f}")
+    print()
+
+    # Currency breakdown — sorted by USD-equivalent share descending
+    print(f"  {BOLD}By Currency:{RESET}")
+    by_ccy = summary.market_value_by_currency()
+    ccy_rows = []
+    for ccy, native_total in by_ccy.items():
+        usd_equiv = summary.to_usd(native_total, ccy)
+        if usd_equiv is None:
+            continue
+        ccy_rows.append((ccy, native_total, usd_equiv, usd_equiv / total_usd * 100))
+    ccy_rows.sort(key=lambda r: r[2], reverse=True)
+    for ccy, native_total, usd_equiv, pct in ccy_rows:
+        native_fmt = _format_native(native_total, ccy)
+        print(f"    {ccy:<5} {native_fmt:>14}   {pct:5.1f}%   (${usd_equiv:,.2f})")
+    print()
+
+    # Asset type breakdown
+    print(f"  {BOLD}By Asset Type:{RESET}")
+    by_type = summary.market_value_by_asset_type_usd()
+    type_rows = sorted(by_type.items(), key=lambda kv: kv[1], reverse=True)
+    for asset_type, usd_total in type_rows:
+        pct = usd_total / total_usd * 100
+        label = asset_type.capitalize()
+        print(f"    {label:<7} ${usd_total:>10,.2f}   {pct:5.1f}%")
+    print()
+
     print(f"  As of:        {summary.timestamp:%Y-%m-%d %H:%M}")
 
 
